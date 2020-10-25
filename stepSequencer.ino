@@ -33,6 +33,8 @@ static inline void setMaskedBitsTo(volatile uint8_t & port, uint8_t mask, uint8_
 }
 
 
+#define countof(arr) (sizeof(arr) / sizeof(arr[0]))
+
 #define ASSERT(cond, ...) do{												\
 	if(!(cond)){															\
 		_onFailedAssert( #cond, __FILE__, __LINE__, "" __VA_ARGS__);  		\
@@ -60,19 +62,6 @@ void _onFailedAssert(const char *cond, const char *file, int line, ...){
 
 	va_end(vargs);
 	while(1){}
-}
-
-void setup(){
-	Serial.begin(115200);
-	Serial.println("--------------- Step Sequencer Start --------------");
-
-
-
-	setBitsHigh(DDRB, POT_nENABLE | LED_nENABLE | MUX_ADDR) ;
-	setBitsHigh(DDRD, CLK_OUT);
-
-	initADC();
-	startAdcRead();
 }
 
 
@@ -115,8 +104,8 @@ void startAdcRead(){
 
 //////////////// Rate Pot
 
-
-int rateVal = 0; // ranges from 0 -> 1023-rateHysteresis
+// rateVal ranges from 0 -> 1023-rateHysteresis
+int rateVal = -1; // force first read to produce a change
 const int rateHysteresis = 4;
 
 void checkRateVal(){
@@ -158,29 +147,85 @@ void checkRateVal(){
 ////////////////////////////////
 
 int _quarterNote = 500;
-uint32_t _mux_lastStep = 0;
 
+uint32_t _mux_lastStep = 0;
 uint8_t _mux_stepNum = 0;
 uint8_t _mux_numSteps = 16;
+uint16_t _mux_durations[16];
 
 
 uint32_t _clk_lastStep = 0;
 uint8_t _clk_stepNum = 0;
 uint8_t _clk_numSteps = 2;
-
-uint16_t _clk_durations[2] = {1000, 1000};
+uint16_t _clk_durations[2];
 
 
 void setQuarterNote(int quarterNote){
+	Serial.println(__func__);
 	PRINT(quarterNote);
 
 	_quarterNote = quarterNote;
 
-	// _clk_durations[0] = min(200, quarterNote/2);
-	_clk_durations[0] = quarterNote/2;
+	uint32_t now = millis();
+
+	// calc durationSoFar and durationTotoal
+
+	uint16_t mux_durationSoFar = 0;
+	uint16_t mux_durationTotal = 0;
+	for(int8_t i=0; i<_mux_numSteps; i++){
+		if(i < _mux_stepNum){
+			mux_durationSoFar += _mux_durations[i];
+		}else if(i == _mux_stepNum){
+			mux_durationSoFar += (now - _mux_lastStep);
+		}
+		mux_durationTotal += _mux_durations[i];
+	}
+
+
+	// uint16_t clk_durationSoFar = 0;
+	// uint16_t clk_durationTotal = 0;
+	// for(int8_t i=0; i<_clk_numSteps; i++){
+	// 	if(i < _clk_stepNum){
+	// 		clk_durationSoFar += _clk_durations[i];
+	// 	}else if(i == _clk_stepNum){
+	// 		clk_durationSoFar += (now - _clk_lastStep);
+	// 	}
+	// 	clk_durationTotal += _clk_durations[i];
+	// }
+
+
+
+
+	///// update durations
+	for(int8_t i=0; i<countof(_mux_durations); i++){
+		_mux_durations[i] = _quarterNote;
+	}
+
+	_clk_durations[0] = min(200, quarterNote/2);
+	// _clk_durations[0] = quarterNote/2;
 	_clk_durations[1] = quarterNote - _clk_durations[0];
 
+
+	////////////////////
+
+	uint16_t mux_newDurationTotal = 0;
+	for(int8_t i=0; i<_mux_numSteps; i++){
+		mux_newDurationTotal += _mux_durations[i];
+	}
+
+	uint16_t mux_newDurationSoFar = map(mux_durationSoFar, 0, mux_durationTotal, 0, mux_newDurationTotal);
+	uint32_t newStartTime = now - mux_newDurationSoFar;
+
 	_resetPhase();
+	_clk_lastStep = newStartTime;
+	_mux_lastStep = newStartTime;
+
+
+	for(uint32_t t=newStartTime; t != now+1; t++){
+		processSteps(t);
+	}
+
+
 }
 
 
@@ -192,6 +237,7 @@ void _resetPhase(){
 	_clk_stepNum = _clk_numSteps - 1;
 	_mux_stepNum = _mux_numSteps - 1;
 
+	// rollover to 0
 	_mux_step();
 	_clk_step();
 
@@ -200,21 +246,23 @@ void _resetPhase(){
 	_clk_lastStep = now;
 	_mux_lastStep = now;
 
-	PRINT(_clk_lastStep);
-	PRINT(_mux_lastStep);
-	PRINT(_quarterNote);
-	PRINT(_clk_durations[0]);
-	PRINT(_clk_durations[1]);
+	// PRINT(_clk_lastStep);
+	// PRINT(_mux_lastStep);
+	// PRINT(_quarterNote);
+	// PRINT(_clk_durations[0]);
+	// PRINT(_clk_durations[1]);
 
 }
 
 
 void _mux_step(){
+	// Serial.println(__func__);
 	_mux_stepNum = (_mux_stepNum+1) % _mux_numSteps;
 	setMaskedBitsTo(MUX_PORT, MUX_ADDR, _mux_stepNum);
 }
 
 void _clk_step(){
+	// Serial.println(__func__);
 	_clk_stepNum = (_clk_stepNum+1) % _clk_numSteps;
 	if(_clk_stepNum == 0){
 		setBitsHigh(CLK_OUT_PORT, CLK_OUT);
@@ -223,18 +271,30 @@ void _clk_step(){
 	}
 }
 
+
 void processSteps(){
 	uint32_t now = millis();
+	processSteps(now);
+}
 
-	if(now - _mux_lastStep >= _quarterNote){
+void processSteps(uint32_t now){
+	
+
+	// if(now - _mux_lastStep >= _quarterNote){
+	// 	_mux_step();
+	// 	_mux_lastStep += _quarterNote;
+	// }
+
+	if(now - _mux_lastStep >= _mux_durations[_mux_stepNum]){
+		_mux_lastStep += _mux_durations[_mux_stepNum];
 		_mux_step();
-		_mux_lastStep += _quarterNote;
 	}
 
 
 	if(now - _clk_lastStep >= _clk_durations[_clk_stepNum]){
 		_clk_lastStep += _clk_durations[_clk_stepNum];
 		_clk_step();
+
 		if(_clk_stepNum == 0){
 			ASSERT(_mux_lastStep == _clk_lastStep, "(%lu) %lu, %lu", now, _mux_lastStep, _clk_lastStep);
 		}
@@ -248,5 +308,21 @@ void loop(){
 	processSteps();
 
 }
+
+void setup(){
+	Serial.begin(115200);
+	Serial.println("--------------- Step Sequencer Start --------------");
+
+
+
+	setBitsHigh(DDRB, POT_nENABLE | LED_nENABLE | MUX_ADDR) ;
+	setBitsHigh(DDRD, CLK_OUT);
+
+	initADC();
+	startAdcRead();
+
+	while(!adcValAvail){} // force ADC read before anything else
+}
+
 
 
