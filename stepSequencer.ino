@@ -160,12 +160,14 @@ uint8_t _clk_numSteps = 2;
 uint16_t _clk_durations[2];
 
 
+void _resetPhase();
+
 void setQuarterNote(int quarterNote){
 	Serial.println(__func__);
 	PRINT(quarterNote);
 
-	_quarterNote = quarterNote;
 
+	_quarterNote = quarterNote;
 	uint32_t now = millis();
 
 	// calc durationSoFar and durationTotoal
@@ -180,20 +182,6 @@ void setQuarterNote(int quarterNote){
 		}
 		mux_durationTotal += _mux_durations[i];
 	}
-
-
-	// uint16_t clk_durationSoFar = 0;
-	// uint16_t clk_durationTotal = 0;
-	// for(int8_t i=0; i<_clk_numSteps; i++){
-	// 	if(i < _clk_stepNum){
-	// 		clk_durationSoFar += _clk_durations[i];
-	// 	}else if(i == _clk_stepNum){
-	// 		clk_durationSoFar += (now - _clk_lastStep);
-	// 	}
-	// 	clk_durationTotal += _clk_durations[i];
-	// }
-
-
 
 
 	///// update durations
@@ -221,10 +209,27 @@ void setQuarterNote(int quarterNote){
 	_mux_lastStep = newStartTime;
 
 
-	for(uint32_t t=newStartTime; t != now+1; t++){
-		processSteps(t);
-	}
+	// for(uint32_t t=newStartTime; t != now+1; t++){
+	// 	processSteps(t);
+	// }
 
+	// PRINT(now);
+	// PRINT(newStartTime);
+
+	uint32_t t = newStartTime;
+	while(t != now){
+
+		uint32_t tillMuxStep = _mux_durations[_mux_stepNum] - (t - _mux_lastStep);
+		uint32_t tillClkStep = _clk_durations[_clk_stepNum] - (t - _clk_lastStep);
+		uint32_t tillNow = now - t;
+
+		uint32_t delta = min(tillMuxStep, min(tillClkStep, tillNow));
+
+		t += delta;
+
+		processSteps(t);
+		
+	}
 
 }
 
