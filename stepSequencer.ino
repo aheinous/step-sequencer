@@ -1,16 +1,25 @@
 #include <Arduino.h>
 
 
+#define DEBUG
+
 const uint8_t CLK_OUT = 1<<4;
 volatile uint8_t & CLK_OUT_PORT = PORTD;
+volatile uint8_t & CLK_OUT_DDR = DDRD;
 
 const uint8_t POT_nENABLE = 1<<5;
 const uint8_t LED_nENABLE = 1<<4;
 const uint8_t MUX_ADDR = 0xF;
 volatile uint8_t & MUX_PORT = PORTB;
+volatile uint8_t & MUX_DDR = DDRB;
 
 
-int ratePin = A3;
+const uint8_t nTAP = 1<<3;
+volatile uint8_t & nTAP_PORT = PORTD;
+volatile uint8_t & nTAP_PIN = PIND;
+volatile uint8_t & nTAP_DDR = DDRD;
+
+uint8_t RATE_ADC_CHANNEL = 3;
 
 
 const int MIN_QUARTER_NOTE = 200;
@@ -18,7 +27,6 @@ const int MAX_QUARTER_NOTE = 2000;
 
 
 
-#define PRINT(var) do{ Serial.print(#var ": "); Serial.println(var);} while(0)
 
 static inline void setBitsHigh(volatile uint8_t & port, uint8_t mask){
 	port |= mask;
@@ -32,39 +40,63 @@ static inline void setMaskedBitsTo(volatile uint8_t & port, uint8_t mask, uint8_
 		port = (port & ~mask) | (value & mask);
 }
 
-
-#define countof(arr) (sizeof(arr) / sizeof(arr[0]))
-
-#define ASSERT(cond, ...) do{												\
-	if(!(cond)){															\
-		_onFailedAssert( #cond, __FILE__, __LINE__, "" __VA_ARGS__);  		\
-	}																		\
-} while(0)
-
-
-
-void _onFailedAssert(const char *cond, const char *file, int line, ...){
-	va_list vargs;
-	va_start(vargs, line);
-
-	static char buff[256];
-
-	snprintf(buff, sizeof(buff), "ASSERTION FAILURE: %s evaluates to false.\n", cond);
-	Serial.print(buff);	
-	snprintf(buff, sizeof(buff), "At %s:%d\n", file, line);
-	Serial.print(buff);
-
-	const char *usrFmt = va_arg(vargs, const char*);
-	if(usrFmt[0] != '\0'){ 
-		vsnprintf(buff, sizeof(buff), usrFmt, vargs);
-		Serial.println(buff);
-	}
-
-	va_end(vargs);
-	while(1){}
+static inline bool isBitHigh(volatile uint8_t & port, uint8_t bit){
+	return bit & port;
 }
 
 
+#define countof(arr) (sizeof(arr) / sizeof(arr[0]))
+
+#ifdef DEBUG
+
+	#define PRINT_VAR(var) do{ Serial.print(#var ": "); Serial.println(var);} while(0)
+
+	#define ASSERT(cond, ...) do{												\
+		if(!(cond)){															\
+			_onFailedAssert( #cond, __FILE__, __LINE__, "" __VA_ARGS__);  		\
+		}																		\
+	} while(0)
+
+
+	char strBuff[128];
+
+	void _onFailedAssert(const char *cond, const char *file, int line, ...){
+		va_list vargs;
+		va_start(vargs, line);
+
+		snprintf(strBuff, sizeof(strBuff), "ASSERTION FAILURE: %s evaluates to false.\n", cond);
+		Serial.print(strBuff);	
+		snprintf(strBuff, sizeof(strBuff), "At %s:%d\n", file, line);
+		Serial.print(strBuff);
+
+		const char *usrFmt = va_arg(vargs, const char*);
+		if(usrFmt[0] != '\0'){ 
+			vsnprintf(strBuff, sizeof(strBuff), usrFmt, vargs);
+			Serial.println(strBuff);
+		}
+
+		va_end(vargs);
+		while(1){}
+	}
+
+	void PRINTF(const char* fmt, ...){
+		va_list vargs;
+		va_start(vargs, fmt);
+
+		vsnprintf(strBuff, sizeof(strBuff), fmt, vargs );
+		Serial.print(strBuff);
+
+		va_end(vargs);
+	}
+
+	#define PRINT(x) Serial.print(x)
+	#define PRINTLN(x) Serial.println(x)
+#else
+	#define PRINT_VAR(var) ((void) sizeof(var))
+	#define ASSERT(cond, ...) ((void) sizeof(cond))
+	#define PRINT(x) ((void) sizeof(x))
+	#define PRINTLN(x) ((void) sizeof(x))
+#endif
 
 
 ///////////////////////////////////////// ADC ///////
@@ -83,7 +115,7 @@ ISR(ADC_vect){
 
 void initADC(){
   	// Set MUX3..0 in ADMUX to read from AD3
-	setMaskedBitsTo(ADMUX, 0xF, 3);
+	setMaskedBitsTo(ADMUX, 0xF, RATE_ADC_CHANNEL);
 
 	// Set the Prescaler to 128 (16000KHz/128 = 125KHz) (Slowest possible)
 	// Above 200KHz 10-bit results are not reliable.
@@ -92,8 +124,6 @@ void initADC(){
 	// ADEN: enable ADC
 	// ADIE: enable interrupt
 	setBitsHigh(ADCSRA, bit(ADEN) | bit(ADIE));
-
-	interrupts();
 }
 
 void startAdcRead(){
@@ -108,7 +138,7 @@ void startAdcRead(){
 int rateVal = -1000; // force first read to produce a change
 const int rateHysteresis = 4;
 
-void checkRateVal(){
+void checkRateVal(uint32_t now){
 	// Serial.println(__func__);
 	if(!adcValAvail){
 		return;
@@ -140,7 +170,7 @@ void checkRateVal(){
 		qtrNote = map(rateVal, maxRateVal/2 + 1, maxRateVal, halfWay, MIN_QUARTER_NOTE);
 	}
 
-	setQuarterNote(qtrNote);
+	setQuarterNote(qtrNote, now);
 	startAdcRead();
 }
 
@@ -235,26 +265,43 @@ MuxSequencer muxSequencer;
 ClockSequencer clockSequencer;
 
 
+int _quarterNote = 0;
+
+void setQuarterNoteAt(int qtrNote, uint32_t at, uint32_t now){
+	// uint16_t mux_durationSoFar = muxSequencer.getDurationSoFar(now);
+	uint16_t clk_durationSoFar = clockSequencer.getDurationSoFar(now);
+	int offset;
+	if(clk_durationSoFar < _quarterNote/2){
+		offset = -clk_durationSoFar;
+	}else{
+		offset = _quarterNote - clk_durationSoFar;
+	}
+	setQuarterNoteWithOffset(qtrNote, offset, now);
+}
 
 
-void setQuarterNote(int qtrNote){
-	Serial.println(__func__);
-	PRINT(qtrNote);
+void setQuarterNoteWithOffset(int qtrNote, int offset, uint32_t now){
+	PRINTLN(__func__);
+	PRINT_VAR(qtrNote);
+	PRINT_VAR(offset);
+	PRINT_VAR(now);
 
-	uint32_t now = millis();
+	_quarterNote = qtrNote;
 
 	//// calc getDurationSoFar and getDurationTotal. these are for
 	//// phase calculation later
 	uint16_t mux_durationSoFar = muxSequencer.getDurationSoFar(now);
 	uint16_t mux_durationTotal = muxSequencer.getDurationTotal();
 
-	PRINT(mux_durationSoFar);
-	PRINT(mux_durationTotal);
+	// mux_durationSoFar = mu
+
+	PRINT_VAR(mux_durationSoFar);
+	PRINT_VAR(mux_durationTotal);
 
 
 	///// update mux durations
 	uint16_t mux_durations[16];
-	for(int8_t i=0; i<countof(mux_durations); i++){
+	for(uint8_t i=0; i<countof(mux_durations); i++){
 		mux_durations[i] = qtrNote;
 	}
 	muxSequencer.setDurations(mux_durations, countof(mux_durations));
@@ -270,8 +317,9 @@ void setQuarterNote(int qtrNote){
 		clockSequencer.resetPhase(now);
 		muxSequencer.resetPhase(now);
 	}else{
+		uint32_t adj_durationSoFar = (mux_durationSoFar + offset) % mux_durationTotal;
 		uint16_t mux_newDurationTotal = muxSequencer.getDurationTotal();
-		uint16_t mux_newDurationSoFar = map(mux_durationSoFar, 0, mux_durationTotal, 0, mux_newDurationTotal);
+		uint16_t mux_newDurationSoFar = map(adj_durationSoFar, 0, mux_durationTotal, 0, mux_newDurationTotal);
 		uint32_t newStartTime = now - mux_newDurationSoFar;
 
 		muxSequencer.setNewPhase(newStartTime, now);
@@ -279,9 +327,12 @@ void setQuarterNote(int qtrNote){
 	}
 }
 
+void setQuarterNote(int qtrNote, uint32_t now){
+	setQuarterNoteWithOffset(qtrNote, 0, now);
+}
 
-void processSteps(){
-	uint32_t now = millis();
+
+void processSteps(uint32_t now){
 	muxSequencer.process(now);
 	clockSequencer.process(now);
 
@@ -291,20 +342,115 @@ void processSteps(){
 }
 
 
-void loop(){
-	checkRateVal();
-	processSteps();
+
+class Debouncer{
+public:
+	void update(bool high, uint32_t now){
+		_prevPressed = _pressed;
+		_prevHigh = _high;
+
+		_high = high;
+
+
+		if(now - _lastTransition >= THRESHOLD){
+			_pressed = !_high;
+		}
+		if(_high != _prevHigh){
+			_lastTransition = now;
+		}
+	}
+
+
+	inline bool justPressed(){
+		return _pressed && !_prevPressed;
+	}
+
+	inline bool pressed(){
+		return _pressed;
+	}
+
+	inline bool justReleased(){
+		return !_pressed && _prevPressed;
+	}
+
+
+private:
+	const static uint8_t THRESHOLD = 50;
+
+	uint32_t _lastTransition = -THRESHOLD;
+	bool _prevHigh = true;
+	bool _prevPressed = false;
+	bool _high = true;
+	bool _pressed = false;
+};
+
+Debouncer tapDebouncer;
+
+
+
+uint32_t lastPress = -MAX_QUARTER_NOTE;
+
+void processTap(uint32_t now){
+	tapDebouncer.update(isBitHigh(nTAP_PIN, nTAP), now);
+
+	if(tapDebouncer.justPressed()){
+		PRINTLN("pressed");
+	}
+	if(tapDebouncer.justReleased()){
+		PRINTLN("released");
+	}
+
+
+	if(!tapDebouncer.justPressed()){
+		return;
+	}
+
+	if(now - lastPress > MAX_QUARTER_NOTE){
+		lastPress = now;
+		return;
+	}
+
+	uint32_t qtrNote = now - lastPress;
+	setQuarterNoteAt(qtrNote, now, now);
+
 
 }
 
+
+void loop(){
+	uint32_t now = millis();
+	checkRateVal(now);
+	processSteps(now);
+	processTap(now);
+
+	static uint32_t lastMillis = now;
+	static uint32_t iter = 0;
+	if(++iter %10000 == 0){
+		PRINT(iter/10000);
+		PRINTF(": %lu ms\n", now-lastMillis);
+		lastMillis = now;
+	}
+
+}
+
+
 void setup(){
+	#ifdef DEBUG
 	Serial.begin(115200);
-	Serial.println("--------------- Step Sequencer Start --------------");
+	#endif
+	PRINTLN("--------------- Step Sequencer Start --------------");
 
 
 
-	setBitsHigh(DDRB, POT_nENABLE | LED_nENABLE | MUX_ADDR) ;
-	setBitsHigh(DDRD, CLK_OUT);
+
+	setBitsHigh(MUX_DDR, POT_nENABLE | LED_nENABLE | MUX_ADDR) ;
+	setBitsHigh(CLK_OUT_DDR, CLK_OUT);
+
+	setBitsHigh(nTAP_PORT, nTAP);
+	// pinMode(0,0);
+	// nTAP_PORT = 0xFF;
+
+	// pinMode(3, INPUT_PULLUP);
 
 	initADC();
 	startAdcRead();
