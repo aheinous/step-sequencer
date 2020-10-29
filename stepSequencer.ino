@@ -265,9 +265,9 @@ MuxSequencer muxSequencer;
 ClockSequencer clockSequencer;
 
 
-int _quarterNote = 0;
+uint16_t _quarterNote = 0;
 
-void setQuarterNoteAt(int qtrNote, uint32_t at, uint32_t now){
+void setQuarterNoteAt(uint16_t qtrNote, uint32_t at, uint32_t now){
 	// uint16_t mux_durationSoFar = muxSequencer.getDurationSoFar(now);
 	uint16_t clk_durationSoFar = clockSequencer.getDurationSoFar(now);
 	int offset;
@@ -388,7 +388,68 @@ Debouncer tapDebouncer;
 
 
 
-uint32_t lastPress = -MAX_QUARTER_NOTE;
+template <typename T, uint8_t SIZE>
+class LastNBuffer{
+public:
+	LastNBuffer(T init){
+		for(uint8_t i=0; i<SIZE; i++){
+			data[i] = init;
+		}
+	}
+
+	inline void push(T e){
+		head = (head+1) % SIZE;
+		data[head] = e;
+	}
+
+	inline T peek(uint8_t offset){
+		ASSERT(offset < SIZE);
+		return data[(head - offset + SIZE) % SIZE];
+	}
+
+	inline uint8_t size(){
+		return SIZE;
+	}
+private:
+	uint8_t head = 0;
+	T data[SIZE];
+};
+
+
+LastNBuffer<uint32_t, 4> tapHistory(-MAX_QUARTER_NOTE);
+
+bool withinPercent(int32_t x, int32_t y, int8_t percent){
+	int32_t percentOff = (abs(x-y)*100) / x;
+	return percentOff <= percent;
+}
+
+void onTap(uint32_t now){
+	tapHistory.push(now);
+
+
+	uint16_t firstDelta = now-tapHistory.peek(1);
+	if(firstDelta > MAX_QUARTER_NOTE){
+		return;
+	}
+	if(firstDelta < MIN_QUARTER_NOTE){
+		PRINTLN("super quick press");
+	}
+
+	uint8_t intvalCnt = 1;
+
+	for(; intvalCnt<tapHistory.size()-1; intvalCnt++){
+		uint16_t curDelta = tapHistory.peek(intvalCnt)-tapHistory.peek(intvalCnt+1);
+		if(!withinPercent(firstDelta, curDelta, 10)){
+			break;
+		}
+	}
+
+	PRINT_VAR(intvalCnt);
+
+	uint16_t qtrNote = (now - tapHistory.peek(intvalCnt)) / (intvalCnt);
+	setQuarterNoteAt(qtrNote, now, now);
+}
+
 
 void processTap(uint32_t now){
 	tapDebouncer.update(isBitHigh(nTAP_PIN, nTAP), now);
@@ -401,19 +462,9 @@ void processTap(uint32_t now){
 	}
 
 
-	if(!tapDebouncer.justPressed()){
-		return;
+	if(tapDebouncer.justPressed()){
+		onTap(now);
 	}
-
-	if(now - lastPress > MAX_QUARTER_NOTE){
-		lastPress = now;
-		return;
-	}
-
-	uint32_t qtrNote = now - lastPress;
-	setQuarterNoteAt(qtrNote, now, now);
-
-
 }
 
 
