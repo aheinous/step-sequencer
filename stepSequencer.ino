@@ -1,23 +1,28 @@
 #include <Arduino.h>
+#include <Wire.h>
+#include <MCP23017.h>
 
 
 #define DEBUG
 
 const uint8_t CLK_OUT = 1<<4;
-volatile uint8_t & CLK_OUT_PORT = PORTD;
+volatile uint8_t & CLK_OUT_WRITE = PORTD;
 volatile uint8_t & CLK_OUT_DDR = DDRD;
 
 const uint8_t POT_nENABLE = 1<<5;
 const uint8_t LED_nENABLE = 1<<4;
 const uint8_t MUX_ADDR = 0xF;
-volatile uint8_t & MUX_PORT = PORTB;
+volatile uint8_t & MUX_WRITE = PORTB;
 volatile uint8_t & MUX_DDR = DDRB;
 
 
 const uint8_t nTAP = 1<<3;
-volatile uint8_t & nTAP_PORT = PORTD;
-volatile uint8_t & nTAP_PIN = PIND;
+volatile uint8_t & nTAP_WRITE = PORTD;
+volatile uint8_t & nTAP_READ = PIND;
 volatile uint8_t & nTAP_DDR = DDRD;
+
+const uint8_t IOEX_INT = 1<<2;
+volatile uint8_t & IOEX_INT_READ = PIND;
 
 uint8_t RATE_ADC_CHANNEL = 3;
 
@@ -37,7 +42,7 @@ static inline void clearBits(volatile uint8_t & port, uint8_t mask){
 }
 
 static inline void setMaskedBitsTo(volatile uint8_t & port, uint8_t mask, uint8_t value){
-		port = (port & ~mask) | (value & mask);
+	port = (port & ~mask) | (value & mask);
 }
 
 static inline bool isBitHigh(volatile uint8_t & port, uint8_t bit){
@@ -51,33 +56,9 @@ static inline bool isBitHigh(volatile uint8_t & port, uint8_t bit){
 
 	#define PRINT_VAR(var) do{ Serial.print(#var ": "); Serial.println(var);} while(0)
 
-	#define ASSERT(cond, ...) do{												\
-		if(!(cond)){															\
-			_onFailedAssert( #cond, __FILE__, __LINE__, "" __VA_ARGS__);  		\
-		}																		\
-	} while(0)
-
-
 	char strBuff[128];
 
-	void _onFailedAssert(const char *cond, const char *file, int line, ...){
-		va_list vargs;
-		va_start(vargs, line);
-
-		snprintf(strBuff, sizeof(strBuff), "ASSERTION FAILURE: %s evaluates to false.\n", cond);
-		Serial.print(strBuff);	
-		snprintf(strBuff, sizeof(strBuff), "At %s:%d\n", file, line);
-		Serial.print(strBuff);
-
-		const char *usrFmt = va_arg(vargs, const char*);
-		if(usrFmt[0] != '\0'){ 
-			vsnprintf(strBuff, sizeof(strBuff), usrFmt, vargs);
-			Serial.println(strBuff);
-		}
-
-		va_end(vargs);
-		while(1){}
-	}
+	void PRINTF(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 	void PRINTF(const char* fmt, ...){
 		va_list vargs;
@@ -91,6 +72,36 @@ static inline bool isBitHigh(volatile uint8_t & port, uint8_t bit){
 
 	#define PRINT(x) Serial.print(x)
 	#define PRINTLN(x) Serial.println(x)
+
+
+	#define ASSERT(cond, ...) do{												\
+		if(!(cond)){															\
+			_onFailedAssert( #cond, __FILE__, __LINE__, "" __VA_ARGS__);  		\
+		}																		\
+	} while(0)
+
+
+	void _onFailedAssert(const char *cond, const char *file, int line, const char *usrFmt, ...)
+		__attribute__ ((format (printf, 4, 5)));
+
+
+	void _onFailedAssert(const char *cond, const char *file, int line, const char *usrFmt, ...)	{
+		va_list vargs;
+		va_start(vargs, usrFmt);
+
+		PRINTF("ASSERTION FAILURE: %s evaluates to false.\n", cond);
+		PRINTF("At %s:%d\n", file, line);
+
+		if(usrFmt[0] != '\0'){ 
+			vsnprintf(strBuff, sizeof(strBuff), usrFmt, vargs);
+			Serial.println(strBuff);
+		}
+
+		va_end(vargs);
+		while(1){}
+	}
+
+
 #else
 	#define PRINT_VAR(var) ((void) sizeof(var))
 	#define ASSERT(cond, ...) ((void) sizeof(cond))
@@ -98,6 +109,11 @@ static inline bool isBitHigh(volatile uint8_t & port, uint8_t bit){
 	#define PRINTLN(x) ((void) sizeof(x))
 #endif
 
+
+
+///////////////////////////////////////// IO Expander daughter board ////
+
+MCP23017 ioExpander(0x7);
 
 ///////////////////////////////////////// ADC ///////
 
@@ -153,24 +169,25 @@ void checkRateVal(uint32_t now){
 		rateVal = adcVal - rateHysteresis;
 	}else{
 		// no change
-		startAdcRead();
-		return;
+		goto finish;
 	}
 
 
 	//// map rateVal to qtrNote duration ////
+	{
+		int qtrNote;
+		const int maxRateVal = 1023-rateHysteresis;
+		const int halfWay = map(900, 0, 1000, MAX_QUARTER_NOTE, MIN_QUARTER_NOTE);
 
-	int qtrNote;
-	const int maxRateVal = 1023-rateHysteresis;
-	const int halfWay = map(900, 0, 1000, MAX_QUARTER_NOTE, MIN_QUARTER_NOTE);
+		if(rateVal <= maxRateVal/2){
+			qtrNote = map(rateVal, 0, maxRateVal/2, MAX_QUARTER_NOTE, halfWay);
+		}else{
+			qtrNote = map(rateVal, maxRateVal/2 + 1, maxRateVal, halfWay, MIN_QUARTER_NOTE);
+		}
 
-	if(rateVal <= maxRateVal/2){
-		qtrNote = map(rateVal, 0, maxRateVal/2, MAX_QUARTER_NOTE, halfWay);
-	}else{
-		qtrNote = map(rateVal, maxRateVal/2 + 1, maxRateVal, halfWay, MIN_QUARTER_NOTE);
+		setQuarterNote(qtrNote, now);
 	}
-
-	setQuarterNote(qtrNote, now);
+finish:
 	startAdcRead();
 }
 
@@ -182,9 +199,6 @@ class Sequencer{
 public:
 
 	void process(uint32_t now){
-		ASSERT(numSteps);
-		ASSERT(numSteps <= countof(durations));
-
 		while(now - lastStep >= durations[stepNum]){
 			lastStep += durations[stepNum];
 			stepNum = (stepNum + 1) % numSteps;
@@ -232,8 +246,7 @@ public:
 
 	virtual void updatePins() = 0;
 
-
-
+	// only public for debugging
 	uint32_t lastStep = 0;
 	uint8_t stepNum = 0;
 	uint8_t numSteps;
@@ -244,7 +257,7 @@ public:
 class MuxSequencer : public Sequencer{
 public:
 	virtual void updatePins(){
-		setMaskedBitsTo(MUX_PORT, MUX_ADDR, stepNum);	
+		setMaskedBitsTo(MUX_WRITE, MUX_ADDR, stepNum);	
 	}
 };
 
@@ -253,9 +266,9 @@ class ClockSequencer : public Sequencer{
 public:
 	virtual void updatePins(){
 		if(stepNum == 0){
-			setBitsHigh(CLK_OUT_PORT, CLK_OUT);
+			setBitsHigh(CLK_OUT_WRITE, CLK_OUT);
 		}else{
-			clearBits(CLK_OUT_PORT, CLK_OUT);
+			clearBits(CLK_OUT_WRITE, CLK_OUT);
 		}
 	}
 };
@@ -268,19 +281,19 @@ ClockSequencer clockSequencer;
 uint16_t _quarterNote = 0;
 
 void setQuarterNoteAt(uint16_t qtrNote, uint32_t at, uint32_t now){
-	// uint16_t mux_durationSoFar = muxSequencer.getDurationSoFar(now);
 	uint16_t clk_durationSoFar = clockSequencer.getDurationSoFar(now);
-	int offset;
+	int16_t offset;
 	if(clk_durationSoFar < _quarterNote/2){
 		offset = -clk_durationSoFar;
 	}else{
 		offset = _quarterNote - clk_durationSoFar;
 	}
+	offset += (now - at);
 	setQuarterNoteWithOffset(qtrNote, offset, now);
 }
 
 
-void setQuarterNoteWithOffset(int qtrNote, int offset, uint32_t now){
+void setQuarterNoteWithOffset(uint16_t qtrNote, int16_t offset, uint32_t now){
 	PRINTLN(__func__);
 	PRINT_VAR(qtrNote);
 	PRINT_VAR(offset);
@@ -327,7 +340,7 @@ void setQuarterNoteWithOffset(int qtrNote, int offset, uint32_t now){
 	}
 }
 
-void setQuarterNote(int qtrNote, uint32_t now){
+void setQuarterNote(uint16_t qtrNote, uint32_t now){
 	setQuarterNoteWithOffset(qtrNote, 0, now);
 }
 
@@ -337,7 +350,8 @@ void processSteps(uint32_t now){
 	clockSequencer.process(now);
 
 	if(clockSequencer.stepNum == 0){
-		ASSERT(muxSequencer.lastStep == clockSequencer.lastStep);
+		ASSERT(muxSequencer.lastStep == clockSequencer.lastStep, 
+				"ms.ls: %lu, cs.ls %lu", muxSequencer.lastStep, clockSequencer.lastStep );
 	}
 }
 
@@ -345,17 +359,15 @@ void processSteps(uint32_t now){
 
 class Debouncer{
 public:
-	void update(bool high, uint32_t now){
+	void update(bool newInput, uint32_t now){
 		_prevPressed = _pressed;
-		_prevHigh = _high;
-
-		_high = high;
-
+		_prevInput = _input;
+		_input = newInput;
 
 		if(now - _lastTransition >= THRESHOLD){
-			_pressed = !_high;
+			_pressed = !_input;
 		}
-		if(_high != _prevHigh){
+		if(_input != _prevInput){
 			_lastTransition = now;
 		}
 	}
@@ -378,10 +390,10 @@ private:
 	const static uint8_t THRESHOLD = 50;
 
 	uint32_t _lastTransition = -THRESHOLD;
-	bool _prevHigh = true;
-	bool _prevPressed = false;
-	bool _high = true;
+	bool _input = true;
+	bool _prevInput = true;
 	bool _pressed = false;
+	bool _prevPressed = false;
 };
 
 Debouncer tapDebouncer;
@@ -452,7 +464,7 @@ void onTap(uint32_t now){
 
 
 void processTap(uint32_t now){
-	tapDebouncer.update(isBitHigh(nTAP_PIN, nTAP), now);
+	tapDebouncer.update(isBitHigh(nTAP_READ, nTAP), now);
 
 	if(tapDebouncer.justPressed()){
 		PRINTLN("pressed");
@@ -473,15 +485,67 @@ void loop(){
 	checkRateVal(now);
 	processSteps(now);
 	processTap(now);
+	processIOExpander();
 
 	static uint32_t lastMillis = now;
+	static uint32_t lastMillis_fast = now;
 	static uint32_t iter = 0;
+
+	static uint16_t maxFrame = 0;
+	maxFrame = max(maxFrame, now - lastMillis_fast);
+	lastMillis_fast= now;
+	
 	if(++iter %10000 == 0){
 		PRINT(iter/10000);
-		PRINTF(": %lu ms\n", now-lastMillis);
+		PRINTF(": %lu ms, max frame: %u ms\n", now-lastMillis, maxFrame);
+		maxFrame = 0;
 		lastMillis = now;
 	}
 
+}
+
+
+const uint8_t ROT_ENC_A = (1 << 0);
+const uint8_t ROT_ENC_B = (1 << 1);
+const uint8_t ROT_ENC_BUTTON = (1 << 2);
+const uint8_t FTSW = (1 << 3);
+const uint8_t BUTTON = (1 << 4);
+
+const uint8_t INPUTS = ROT_ENC_A | ROT_ENC_B | ROT_ENC_BUTTON | FTSW | BUTTON;
+
+const uint8_t RGB1 = 0x7;
+const uint8_t RGB2 = 0x38;
+
+const uint8_t INPUT_PORT = IOEX16_PORTA;
+const uint8_t LED_PORT = IOEX16_PORTB;
+
+// ISR(INT0_vect){
+// 		PRINT("ISR: ");
+// 		PRINT_VAR(isBitHigh(PORTD, 1 << 2));
+// }
+
+
+void processIOExpander(){
+	static bool prevInt0 = 3;
+
+	bool int0 = isBitHigh(PIND, 1 << 2);
+
+
+
+	if(int0 == 0){
+		volatile uint8_t iocap = ioExpander.read_8(MCP23x17_INTCAPA);
+		volatile uint8_t inputs = ioExpander.read_8(MCP23x17_GPIOA);
+		// PRINTF("cap: %x, inputs: %x\n", (unsigned int) iocap, (unsigned int) inputs);
+	}
+}
+
+
+void initIOExpander(){
+	ioExpander.begin();
+
+	ioExpander.pullUp_8(INPUT_PORT, INPUTS);
+	ioExpander.write_8(MCP23x17_GPINTENA, INPUTS);
+	ioExpander.pinMode_8(LED_PORT, ~(RGB1 | RGB2));
 }
 
 
@@ -491,23 +555,18 @@ void setup(){
 	#endif
 	PRINTLN("--------------- Step Sequencer Start --------------");
 
-
-
-
 	setBitsHigh(MUX_DDR, POT_nENABLE | LED_nENABLE | MUX_ADDR) ;
 	setBitsHigh(CLK_OUT_DDR, CLK_OUT);
 
-	setBitsHigh(nTAP_PORT, nTAP);
-	// pinMode(0,0);
-	// nTAP_PORT = 0xFF;
-
-	// pinMode(3, INPUT_PULLUP);
+	setBitsHigh(nTAP_WRITE, nTAP);
 
 	initADC();
 	startAdcRead();
 
+	initIOExpander();
+
+
+
 	while(!adcValAvail){} // force ADC read before anything else
 }
-
-
 
