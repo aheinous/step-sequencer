@@ -36,46 +36,35 @@ static void startAdcRead(){
 }
 
 
+
+
 //////////////// Rate Pot
 
-// rateVal ranges from 0 -> 1023-rateHysteresis
-int rateVal = -1000; // force first read to produce a change
-const int rateHysteresis = 4;
+//  hystPos.value() ranges from 0 -> 1023-hystPos.hysteresis
+//  -1000 forces first read to produce a change
+
+Hysteresis<int16_t> hystPot(4, -1000);
 
 void processRatePot(uint32_t now){
-	// Serial.println(__func__);
 	if(!adcValAvail){
 		return;
 	}
 
 
-	//// apply hysteresis ////
-
-	if(adcVal < rateVal){
-		rateVal = adcVal;
-	}else if(adcVal - rateHysteresis > rateVal){
-		rateVal = adcVal - rateHysteresis;
-	}else{
-		// no change
-		goto finish;
-	}
-
-
-	//// map rateVal to qtrNote duration ////
-	{
+	if(hystPot.update(adcVal)){
+		//// map rateVal to qtrNote duration ////
 		int qtrNote;
-		const int maxRateVal = 1023-rateHysteresis;
+		const int maxRateVal = 1023-hystPot.hysteresis;
 		const int halfWay = map(900, 0, 1000, MAX_QUARTER_NOTE, MIN_QUARTER_NOTE);
 
-		if(rateVal <= maxRateVal/2){
-			qtrNote = map(rateVal, 0, maxRateVal/2, MAX_QUARTER_NOTE, halfWay);
+		if(hystPot.value() <= maxRateVal/2){
+			qtrNote = map(hystPot.value(), 0, maxRateVal/2, MAX_QUARTER_NOTE, halfWay);
 		}else{
-			qtrNote = map(rateVal, maxRateVal/2 + 1, maxRateVal, halfWay, MIN_QUARTER_NOTE);
+			qtrNote = map(hystPot.value(), maxRateVal/2 + 1, maxRateVal, halfWay, MIN_QUARTER_NOTE);
 		}
 
 		setQuarterNote(qtrNote, now);
 	}
-finish:
 	startAdcRead();
 }
 
