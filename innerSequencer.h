@@ -7,4 +7,7 @@ void setQuarterNoteAt(uint16_t qtrNote, uint32_t at, uint32_t now);
 
 void processInnerSequencer(uint32_t now);
 
+void setNumSteps(uint8_t n);
+
 void initInnerSequencer();
+
