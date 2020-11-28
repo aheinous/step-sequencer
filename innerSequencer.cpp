@@ -31,7 +31,7 @@ public:
 	}
 
 	void setNewPhase(uint32_t startTime, uint32_t now){
-		// ASSERTF(now - startTime < (100000), "now: %lu, startTime: %lu", now, startTime);
+		ASSERTF(now - startTime < (100000), "now: %lu, startTime: %lu", now, startTime);
 		_lastStep = startTime;
 		_stepNum = 0;
 		process(now);
@@ -64,9 +64,17 @@ public:
 		return total;
 	}
 
-	void setDurations(uint16_t *durations, uint8_t len){
-		memcpy(this->_durations, durations, len*sizeof(durations[0]));
-		_numSteps = len;
+
+	uint16_t *durations(){
+		return &_durations[0];
+	}
+
+	void printDurations(){
+		for(uint8_t i =0; i<16; i++){
+			PRINT(_durations[i]);
+			PRINT(", ");
+		}
+		PRINTLN();
 	}
 
 	virtual void updatePins() = 0;
@@ -82,6 +90,10 @@ public:
 
 class MuxSequencer : public Sequencer{
 public:
+	MuxSequencer(){
+		_numSteps = 16;
+	}
+
 	virtual void updatePins(){
 		setMaskedBitsTo(MUX_WRITE, MUX_ADDR, _stepNum);
 	}
@@ -90,6 +102,10 @@ public:
 
 class ClockSequencer : public Sequencer{
 public:
+	ClockSequencer(){
+		_numSteps = 2;
+	}
+
 	virtual void updatePins(){
 		if(_stepNum == 0){
 			setBitsHigh(CLK_OUT_WRITE, CLK_OUT);
@@ -108,7 +124,7 @@ uint16_t _quarterNote = 0;
 
 // uint8_t numSteps = 16;
 
-int16_t showNumStepsModeRemaining = 0;
+int16_t showNumStepsFor = 0;
 
 
 
@@ -132,17 +148,14 @@ void setQuarterNoteWithOffset(uint16_t qtrNote, int16_t offset, uint32_t now){
 	PVAR(muxSequencer.numSteps());
 
 	///// update mux durations
-	uint16_t mux_durations[16];
 	for(uint8_t i=0; i<muxSequencer.numSteps(); i++){
-		mux_durations[i] = qtrNote;
+		muxSequencer.durations()[i] = qtrNote;
 	}
-	muxSequencer.setDurations(mux_durations, muxSequencer.numSteps());
 
 	//// update clk durations
-	uint16_t clk_durations[2];
-	clk_durations[0] = min(200, qtrNote/2);
-	clk_durations[1] = qtrNote - clk_durations[0];
-	clockSequencer.setDurations(clk_durations, countof(clk_durations));
+	clockSequencer.durations()[0] = min(200, qtrNote/2);
+	clockSequencer.durations()[1] = qtrNote - clockSequencer.durations()[0];
+
 
 	////// set phase
 	if(mux_durationTotal == 0){ // first time set
@@ -182,26 +195,38 @@ void setQuarterNote(uint16_t qtrNote, uint32_t now){
 }
 
 void setNumSteps(uint8_t n){
+	PRINTF("set num steps: %u\n", n);
 	setBitsHigh(MUX_WRITE, POT_nENABLE);
-	showNumStepsModeRemaining = 1000;
-	// numSteps = n;
+	showNumStepsFor = 1000;
 
 	muxSequencer.setNumSteps(n);
+	for(uint8_t i=0; i<n; i++){
+		muxSequencer.durations()[i] = _quarterNote;
+	}
+
 	muxSequencer.setBlitzMode(true);
 }
 
 
 void processInnerSequencer(uint32_t now){
 	static uint32_t prevNow = 0;
-	if(showNumStepsModeRemaining){
+	if(showNumStepsFor){
 		muxSequencer.process(now);
-		showNumStepsModeRemaining -= (now - prevNow);
-		if(showNumStepsModeRemaining <= 0){
-			showNumStepsModeRemaining = 0;
+		showNumStepsFor -= (now - prevNow);
+		if(showNumStepsFor <= 0){
+			showNumStepsFor = 0;
 			muxSequencer.setBlitzMode(false);
 			muxSequencer.resetPhase(now);
 			clockSequencer.resetPhase(now);
 			clearBits(MUX_WRITE, POT_nENABLE);
+			PRINT("Exit show num steps mode.\n");
+			// PRINTF("now: %lu, ms.ls: %lu, cs.ls %lu, ms.stepnum: %u cs.stepnum: %u, ms.numSteps: %u\n",
+			// 	now,
+			// 	muxSequencer._lastStep, clockSequencer._lastStep,
+			// 	muxSequencer._stepNum, clockSequencer._stepNum,
+			// 	muxSequencer.numSteps());
+			muxSequencer.printDurations();
+			clockSequencer.printDurations();
 		}
 	}else{
 		muxSequencer.process(now);
@@ -209,9 +234,11 @@ void processInnerSequencer(uint32_t now){
 
 		if(clockSequencer._stepNum == 0){
 			ASSERTF(muxSequencer._lastStep == clockSequencer._lastStep,
-					"ms.ls: %lu, cs.ls %lu, ms.stepnum: %u cs.stepnum: %u",
+					"now: %lu, ms.ls: %lu, cs.ls %lu, ms.stepnum: %u cs.stepnum: %u, ms.numSteps: %u",
+					now,
 					muxSequencer._lastStep, clockSequencer._lastStep,
-					muxSequencer._stepNum, clockSequencer._stepNum );
+					muxSequencer._stepNum, clockSequencer._stepNum,
+					muxSequencer.numSteps() );
 		}
 
 	}
