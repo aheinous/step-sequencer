@@ -3,6 +3,7 @@
 #include <BPUtil.h>
 #include "config.h"
 #include "innerSequencer.h"
+#include <Debouncer.h>
 
 const uint8_t ROT_ENC_A = (1 << 0);
 const uint8_t ROT_ENC_B = (1 << 1);
@@ -16,6 +17,20 @@ const uint8_t INPUTS = ROT_ENC_A | ROT_ENC_B | ROT_ENC_BUTTON | FTSW | BUTTON;
 const uint8_t RGB1 = 0x7;
 const uint8_t RGB2 = 0x38;
 
+const uint8_t R = 4;
+const uint8_t G = 2;
+const uint8_t B = 1;
+
+const uint8_t RED = R;
+const uint8_t YELLOW = R | G;
+const uint8_t GREEN = G;
+const uint8_t CYAN = G | B;
+const uint8_t BLUE = B;
+const uint8_t VIOLET = R | B;
+const uint8_t WHITE = R | G | B;
+const uint8_t BLACK = 0;
+
+
 const uint8_t INPUT_PORT = MCP23x17_PORTA;
 const uint8_t LED_PORT = MCP23x17_PORTB;
 
@@ -23,7 +38,35 @@ const uint8_t LED_PORT = MCP23x17_PORTB;
 MCP23017 ioExpander(0x7);
 
 
-class RotaryEncoder{
+struct TapDivideMode {
+	uint8_t num;
+	uint8_t denom;
+	uint8_t rgb;
+
+
+};
+
+uint8_t curDivMode = 0;
+
+TapDivideMode divideModes[] = {
+	{1, 1, R},		// quarter note
+	{3, 4, R | G},	// dotted 8th
+	{2, 3, G },		// quarter note triplet
+	{1, 2, G | B},	// eigth
+	{1, 3, B},		// eigth note triplet
+	{1, 4, R | B}	// sixteenth
+};
+
+
+void updateLEDs() {
+	uint8_t rgb1 = divideModes[curDivMode].rgb;
+	uint8_t rgb2 = R | B;
+
+	ioExpander.digitalWrite_8(LED_PORT, ~rgb1 & ~(rgb2 << 3), RGB1 | RGB2);
+	// setMaskedBitsTo(LED)
+}
+
+class RotaryEncoder {
 public:
 
 	// RotaryEncoder()
@@ -87,17 +130,21 @@ public:
 private:
 	// Hysteresis<int32_t> hystValue;
 	int32_t rawValue = 1;
-	int16_t _value = 0;
+	int8_t _value = 0;
 	uint8_t stepsPerDetent;
 	uint8_t prevAB;
-	int16_t minVal;
-	int16_t maxVal;
+	int8_t minVal;
+	int8_t maxVal;
 	// uint8_t
 };
 
 RotaryEncoder rotEnc;
 
-void processIOExpander(){
+Debouncer divButtonDebouncer;
+
+
+
+void processIOExpander(uint32_t now) {
 	// static bool prevInt0 = 3;
 
 	bool int0 = isBitHigh(IOEX_INT_READ, IOEX_INT);
@@ -115,11 +162,18 @@ void processIOExpander(){
 			setNumSteps(now, rotEnc.value());
 		}
 
+		divButtonDebouncer.update(inputs & ROT_ENC_BUTTON, now);
+		if(divButtonDebouncer.justPressed()) {
+			curDivMode = (curDivMode + 1) % countof(divideModes);
+			updateLEDs();
+			setDivide(now, divideModes[curDivMode].num, divideModes[curDivMode].denom);
+		}
+
 	}
 }
 
 
-void initIOExpander(){
+void initIOExpander() {
 	ioExpander.begin();
 
 	ioExpander.pullUp_8(INPUT_PORT, INPUTS);
@@ -128,5 +182,6 @@ void initIOExpander(){
 
 	uint8_t inputs = ioExpander.digitalRead_8(INPUT_PORT);
 	rotEnc.init(4, inputs & ROT_ENC_AB, 16, 1, 16);
+	updateLEDs();
 
 }

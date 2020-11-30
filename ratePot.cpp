@@ -63,7 +63,7 @@ void processRatePot(uint32_t now){
 			qtrNote = map(hystPot.value(), maxRateVal/2 + 1, maxRateVal, halfWay, MIN_QUARTER_NOTE);
 		}
 
-		setQuarterNote(qtrNote, now);
+		setQuarterNote_keepPhase(now, qtrNote);
 	}
 	startAdcRead();
 }

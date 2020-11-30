@@ -1,5 +1,5 @@
 #pragma once
+#include <stdint.h>
 
-
-void processIOExpander();
+void processIOExpander(uint32_t now);
 void initIOExpander();

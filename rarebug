@@ -1,0 +1,29 @@
+--------------- Step Sequencer Start --------------
+setQuarterNoteWithOffset
+qtrNote: 966
+offset: 0
+now: 1
+mux_durationSoFar: 1
+mux_durationTotal: 0
+setQuarterNoteWithOffset
+qtrNote: 963
+offset: 0
+now: 8
+mux_durationSoFar: 7
+mux_durationTotal: 15456
+ASSERTION FAILURE: muxSequencer.lastStep == clockSequencer.lastStep evaluates to false.
+At /home/alex/Arduino/stepSequencer/stepSequencer.ino:336
+
+
+23:52:33.797 -> --------------- Step Sequencer Start --------------
+23:52:33.797 -> setQuarterNoteWithOffset
+23:52:33.830 -> qtrNote: 377
+23:52:33.830 -> offset: 0
+23:52:33.830 -> now: 1
+23:52:33.830 -> mux_durationSoFar: 1
+23:52:33.830 -> mux_durationTotal: 0
+23:52:34.195 -> ASSERTION FAILURE: muxSequencer.lastStep == clockSequencer.lastStep evaluates to false.
+23:52:34.195 -> At /tmp/arduino_build_417424/sketch/innerSequencer.cpp:203
+23:52:34.195 -> ms.ls: 1, cs.ls 378
+
+

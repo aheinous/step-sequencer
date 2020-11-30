@@ -16,7 +16,7 @@ void measurePerformance(uint32_t now){
 	static uint16_t maxFrame = 0;
 	maxFrame = max(maxFrame, now - lastMillis_fast);
 	lastMillis_fast= now;
-	
+
 	if(++iter %100000 == 0){
 		PRINT(iter/100000);
 		PRINTF(": %lu ms, max frame: %u ms\n", now-lastMillis, maxFrame);
@@ -28,11 +28,12 @@ void measurePerformance(uint32_t now){
 
 
 void loop(){
+	// PRINTLN("loop");
 	uint32_t now = millis();
 	processRatePot(now);
 	processInnerSequencer(now);
 	processTap(now);
-	processIOExpander();
+	processIOExpander(now);
 
 	measurePerformance(now);
 

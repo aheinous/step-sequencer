@@ -32,8 +32,8 @@ public:
 		return SIZE;
 	}
 private:
-	uint8_t head = 0;
 	T data[SIZE];
+	uint8_t head = 0;
 };
 
 
@@ -68,7 +68,8 @@ static void onTap(uint32_t now){
 	PVAR(intvalCnt);
 
 	uint16_t qtrNote = (now - tapHistory.peek(intvalCnt)) / (intvalCnt);
-	setQuarterNoteAt(qtrNote, now, now);
+	// setQuarterNoteAt(qtrNote, now, now);
+	setQuarterNote_beatNow(now, qtrNote);
 }
 
 
