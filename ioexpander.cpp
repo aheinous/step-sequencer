@@ -9,10 +9,10 @@ const uint8_t ROT_ENC_A = (1 << 0);
 const uint8_t ROT_ENC_B = (1 << 1);
 const uint8_t ROT_ENC_AB = 0x3;
 const uint8_t ROT_ENC_BUTTON = (1 << 2);
-const uint8_t FTSW = (1 << 3);
-const uint8_t BUTTON = (1 << 4);
+const uint8_t PHASE_RESET_BUTTON = (1 << 3);
+const uint8_t RYTHYM_BUTTON = (1 << 4);
 
-const uint8_t INPUTS = ROT_ENC_A | ROT_ENC_B | ROT_ENC_BUTTON | FTSW | BUTTON;
+const uint8_t INPUTS = ROT_ENC_A | ROT_ENC_B | ROT_ENC_BUTTON | PHASE_RESET_BUTTON | RYTHYM_BUTTON;
 
 const uint8_t INPUT_PORT = MCP23x17_PORTA;
 const uint8_t LED_PORT = MCP23x17_PORTB;
@@ -51,7 +51,8 @@ TapDivideMode divideModes[] = {
 	{2, 3, GREEN },	// quarter note triplet
 	{1, 2, CYAN},	// eigth
 	{1, 3, BLUE},	// eigth note triplet
-	{1, 4, VIOLET}	// sixteenth
+	{1, 4, VIOLET},	// sixteenth
+	{0, 0, WHITE}	// single step mode
 };
 
 
@@ -116,6 +117,7 @@ RotaryEncoder rotEnc;
 
 Debouncer divButtonDebouncer;
 
+Debouncer resetButtonDebouncer;
 
 
 void processIOExpander(uint32_t now) {
@@ -134,7 +136,21 @@ void processIOExpander(uint32_t now) {
 		if(divButtonDebouncer.justPressed()) {
 			curDivMode = (curDivMode + 1) % countof(divideModes);
 			updateLEDs();
-			setDivide(now, divideModes[curDivMode].num, divideModes[curDivMode].denom);
+			if(divideModes[curDivMode].num == 0){
+				setSingleStepMode(true);
+			}else{
+				setSingleStepMode(false);
+				setDivide(now, divideModes[curDivMode].num, divideModes[curDivMode].denom);
+			}
+		}
+
+		resetButtonDebouncer.update(inputs & PHASE_RESET_BUTTON, now);
+		if(resetButtonDebouncer.justPressed()) {
+			if(inSingleStepMode()){
+				singleStep();
+			}else{
+				resetPhase(now);
+			}
 		}
 	}
 }

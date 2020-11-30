@@ -69,6 +69,10 @@ public:
 		_stepNum = n;
 	}
 
+	uint8_t stepNum() {
+		return _stepNum;
+	}
+
 protected:
 	virtual void updatePins() = 0;
 
@@ -143,7 +147,9 @@ public:
 	}
 
 	void setNumSteps(uint32_t now, uint8_t n) {
+		uint8_t stepNum = muxSequencer.stepNum();
 		setParameters(now, m_qtrNote, m_num, m_denom, n);
+		muxSequencer.setStepNum(stepNum < n ? stepNum : 0);
 	}
 
 	void setDivide(uint32_t now, uint8_t num, uint8_t denom) {
@@ -179,7 +185,17 @@ public:
 
 	void resetPhase(uint32_t now){
 		muxSequencer.resetPhase(now);
+		// muxSequencer.updatePins();
 		clockSequencer.resetPhase(now);
+	}
+
+	void singleStep(){
+		muxSequencer.setStepNum((muxSequencer.stepNum() + 1) % muxSequencer.numSteps());
+		muxSequencer.updatePins();
+	}
+
+	void updateMuxPins(){
+		muxSequencer.updatePins();
 	}
 
 private:
@@ -213,10 +229,6 @@ private:
 
 
 
-int16_t showNumStepsFor = 0;
-
-
-
 void setQuarterNote_beatNow(uint32_t now, uint16_t qtrNote) {
 	parameterManager.setQuarterNote_beatNow(now, qtrNote);
 }
@@ -225,16 +237,48 @@ void setQuarterNote_keepPhase(uint32_t now, uint16_t qtrNote) {
 	parameterManager.setQuarterNote_keepPhase(now, qtrNote);
 }
 
+void setDivide(uint32_t now, uint8_t num, uint8_t denom) {
+	parameterManager.setDivide(now, num, denom);
+}
+
+void resetPhase(uint32_t now){
+	parameterManager.resetPhase(now);
+}
+
+
+/////////////// single step mode //////////
+
+bool _inSingleStepMode = false;
+
+void setSingleStepMode(bool ssmode){
+	if(_inSingleStepMode == ssmode){
+		return;
+	}
+	_inSingleStepMode = ssmode;
+	if(ssmode){
+		clearBits(CLK_OUT_WRITE, CLK_OUT);
+	}
+
+}
+bool inSingleStepMode(){
+	return _inSingleStepMode;
+}
+void singleStep(){
+	ASSERT(_inSingleStepMode);
+	parameterManager.singleStep();
+}
+
+
+/////////////// show num steps //////////////
+
+int16_t showNumStepsFor = 0;
+
 void setNumSteps(uint32_t now, uint8_t n) {
 	parameterManager.setNumSteps(now, n);
 	showNumStepsFor = 1000;
 
 	setBitsHigh(MUX_WRITE, POT_nENABLE);
 	clearBits(CLK_OUT_WRITE, CLK_OUT);
-}
-
-void setDivide(uint32_t now, uint8_t num, uint8_t denom) {
-	parameterManager.setDivide(now, num, denom);
 }
 
 
@@ -248,8 +292,14 @@ void process_showNumSteps(uint32_t now, int8_t delta) {
 
 	if(showNumStepsFor <= 0) {
 		showNumStepsFor = 0;
-		parameterManager.resetPhase(now);
 		clearBits(MUX_WRITE, POT_nENABLE);
+		if(_inSingleStepMode){
+			parameterManager.updateMuxPins();
+		}
+		else{
+			parameterManager.resetPhase(now);
+			// parameterManager.stepNum();
+		}
 		PRINT("Exit show num steps mode.\n");
 	}
 }
@@ -259,6 +309,9 @@ void processInnerSequencer(uint32_t now) {
 	static uint32_t prevNow = 0;
 	if(showNumStepsFor) {
 		process_showNumSteps(now, now - prevNow);
+	}
+	else if(_inSingleStepMode){
+		// ...
 	}
 	else {
 		parameterManager.process(now);
