@@ -29,7 +29,7 @@ public:
 	// RotaryEncoder()
 	// {}
 
-	void init(uint8_t stepsPerDetent, uint8_t startAB, int16_t startVal, int16_t minVal, int16_t maxVal){
+	void init(uint8_t stepsPerDetent, uint8_t startAB, int8_t startVal, int8_t minVal, int8_t maxVal) {
 		prevAB = startAB;
 		this->stepsPerDetent = stepsPerDetent;
 		this->minVal = minVal;
@@ -37,7 +37,7 @@ public:
 		_value = startVal;
 	}
 
-	bool update(uint8_t ab){
+	bool update(uint8_t ab) {
 		uint8_t idx = (prevAB << 2) | ab;
 
 		const int8_t LUT[] = {
@@ -50,15 +50,16 @@ public:
 		};
 
 		int8_t diff = LUT[idx];
+		bool wasChange = (prevAB != ab); // detect any encoder "movement" not change in output value
 		prevAB = ab;
 
-		int32_t prevRndVal = rawValue >=0 ? rawValue / 4 : (rawValue-3) / 4;
+		int32_t prevRndVal = rawValue >= 0 ? rawValue / 4 : (rawValue - 3) / 4;
 		rawValue += diff;
 		int32_t rndVal = rawValue >= 0 ? rawValue / 4 : (rawValue - 3) / 4;
 
-		int16_t prevValue = _value;
+		// int16_t prevValue = _value;
 
-		_value = clamp<int16_t>(_value+rndVal-prevRndVal, minVal, maxVal);
+		_value = clamp<int16_t>(_value + rndVal - prevRndVal, minVal, maxVal);
 
 
 		// // PRINTF("ab: %x\n")
@@ -73,11 +74,13 @@ public:
 		// PVAR(value());
 		// PRINTLN();
 
-		return prevValue != _value;
+		// return prevValue != _value;
+
+		return wasChange;
 
 	}
 
-	int16_t value(){
+	int8_t value() {
 		return _value;
 	}
 
@@ -102,12 +105,14 @@ void processIOExpander(){
 	// PVAR(int0);
 
 
-	if(int0 == 0){
+	if(int0 == 0) {
 		// volatile uint8_t iocap = ioExpander.regRead_8(MCP23x17_INTCAPA);
 		uint8_t inputs = ioExpander.digitalRead_8(INPUT_PORT);
-		// PRINTF("cap: %x, inputs: %x\n", (unsigned int) iocap, (unsigned int) inputs);
-		if(rotEnc.update(inputs & ROT_ENC_AB)){
-			setNumSteps(rotEnc.value());
+
+		uint8_t oldValue = rotEnc.value();
+		bool wasMovement = rotEnc.update(inputs & ROT_ENC_AB);
+		if(wasMovement && (oldValue != rotEnc.value() || rotEnc.value() == 1 || rotEnc.value() == 16)) {
+			setNumSteps(now, rotEnc.value());
 		}
 
 	}
