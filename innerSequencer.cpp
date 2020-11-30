@@ -13,7 +13,6 @@ public:
 			_lastStep += _durations[_stepNum];
 			_stepNum = (_stepNum + 1) % _numSteps;
 		}
-		updatePins();
 	}
 
 	void validate(){
@@ -43,7 +42,6 @@ public:
 	void resetPhase(uint32_t now) {
 		_lastStep = now;
 		_stepNum = 0;
-		updatePins();
 	}
 
 	uint16_t getDurationSoFar(uint32_t now) {
@@ -69,7 +67,6 @@ public:
 
 	void setStepNum(uint8_t n) {
 		_stepNum = n;
-		updatePins();
 	}
 
 protected:
@@ -123,6 +120,9 @@ public:
 	void process(uint32_t now) {
 		muxSequencer.process(now);
 		clockSequencer.process(now);
+
+		muxSequencer.updatePins();
+		clockSequencer.updatePins();
 	}
 
 	void setQuarterNote_beatNow(uint32_t now, uint16_t qtrNote) {
