@@ -14,6 +14,9 @@ const uint8_t BUTTON = (1 << 4);
 
 const uint8_t INPUTS = ROT_ENC_A | ROT_ENC_B | ROT_ENC_BUTTON | FTSW | BUTTON;
 
+const uint8_t INPUT_PORT = MCP23x17_PORTA;
+const uint8_t LED_PORT = MCP23x17_PORTB;
+
 const uint8_t RGB1 = 0x7;
 const uint8_t RGB2 = 0x38;
 
@@ -31,10 +34,6 @@ const uint8_t WHITE = R | G | B;
 const uint8_t BLACK = 0;
 
 
-const uint8_t INPUT_PORT = MCP23x17_PORTA;
-const uint8_t LED_PORT = MCP23x17_PORTB;
-
-
 MCP23017 ioExpander(0x7);
 
 
@@ -42,19 +41,17 @@ struct TapDivideMode {
 	uint8_t num;
 	uint8_t denom;
 	uint8_t rgb;
-
-
 };
 
 uint8_t curDivMode = 0;
 
 TapDivideMode divideModes[] = {
-	{1, 1, R},		// quarter note
-	{3, 4, R | G},	// dotted 8th
-	{2, 3, G },		// quarter note triplet
-	{1, 2, G | B},	// eigth
-	{1, 3, B},		// eigth note triplet
-	{1, 4, R | B}	// sixteenth
+	{1, 1, RED},	// quarter note
+	{3, 4, YELLOW},	// dotted eigth
+	{2, 3, GREEN },	// quarter note triplet
+	{1, 2, CYAN},	// eigth
+	{1, 3, BLUE},	// eigth note triplet
+	{1, 4, VIOLET}	// sixteenth
 };
 
 
@@ -63,14 +60,10 @@ void updateLEDs() {
 	uint8_t rgb2 = R | B;
 
 	ioExpander.digitalWrite_8(LED_PORT, ~rgb1 & ~(rgb2 << 3), RGB1 | RGB2);
-	// setMaskedBitsTo(LED)
 }
 
 class RotaryEncoder {
 public:
-
-	// RotaryEncoder()
-	// {}
 
 	void init(uint8_t stepsPerDetent, uint8_t startAB, int8_t startVal, int8_t minVal, int8_t maxVal) {
 		prevAB = startAB;
@@ -96,31 +89,14 @@ public:
 		bool wasChange = (prevAB != ab); // detect any encoder "movement" not change in output value
 		prevAB = ab;
 
+		// divide by 4, but account for -3 to 3 all mapping to 0.
 		int32_t prevRndVal = rawValue >= 0 ? rawValue / 4 : (rawValue - 3) / 4;
 		rawValue += diff;
 		int32_t rndVal = rawValue >= 0 ? rawValue / 4 : (rawValue - 3) / 4;
 
-		// int16_t prevValue = _value;
-
 		_value = clamp<int16_t>(_value + rndVal - prevRndVal, minVal, maxVal);
 
-
-		// // PRINTF("ab: %x\n")
-		// PVAR(ab);
-		// // if(hystValue.update(rawValue)){
-		// PVAR(rawValue);
-		// PVAR(prevRndVal);
-		// PVAR(rndVal);
-
-		// // }
-
-		// PVAR(value());
-		// PRINTLN();
-
-		// return prevValue != _value;
-
 		return wasChange;
-
 	}
 
 	int8_t value() {
@@ -128,14 +104,12 @@ public:
 	}
 
 private:
-	// Hysteresis<int32_t> hystValue;
 	int32_t rawValue = 1;
 	int8_t _value = 0;
 	uint8_t stepsPerDetent;
 	uint8_t prevAB;
 	int8_t minVal;
 	int8_t maxVal;
-	// uint8_t
 };
 
 RotaryEncoder rotEnc;
@@ -145,15 +119,9 @@ Debouncer divButtonDebouncer;
 
 
 void processIOExpander(uint32_t now) {
-	// static bool prevInt0 = 3;
+	bool intterrupt = !isBitHigh(IOEX_INT_READ, IOEX_INT);
 
-	bool int0 = isBitHigh(IOEX_INT_READ, IOEX_INT);
-
-	// PVAR(int0);
-
-
-	if(int0 == 0) {
-		// volatile uint8_t iocap = ioExpander.regRead_8(MCP23x17_INTCAPA);
+	if(intterrupt) {
 		uint8_t inputs = ioExpander.digitalRead_8(INPUT_PORT);
 
 		uint8_t oldValue = rotEnc.value();
@@ -168,7 +136,6 @@ void processIOExpander(uint32_t now) {
 			updateLEDs();
 			setDivide(now, divideModes[curDivMode].num, divideModes[curDivMode].denom);
 		}
-
 	}
 }
 
@@ -183,5 +150,4 @@ void initIOExpander() {
 	uint8_t inputs = ioExpander.digitalRead_8(INPUT_PORT);
 	rotEnc.init(4, inputs & ROT_ENC_AB, 16, 1, 16);
 	updateLEDs();
-
 }

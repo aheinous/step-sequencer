@@ -65,24 +65,13 @@ static void onTap(uint32_t now){
 		}
 	}
 
-	PVAR(intvalCnt);
-
 	uint16_t qtrNote = (now - tapHistory.peek(intvalCnt)) / (intvalCnt);
-	// setQuarterNoteAt(qtrNote, now, now);
 	setQuarterNote_beatNow(now, qtrNote);
 }
 
 
 void processTap(uint32_t now){
 	tapDebouncer.update(isBitHigh(nTAP_READ, nTAP), now);
-
-	if(tapDebouncer.justPressed()){
-		PRINTLN("pressed");
-	}
-	if(tapDebouncer.justReleased()){
-		PRINTLN("released");
-	}
-
 
 	if(tapDebouncer.justPressed()){
 		onTap(now);

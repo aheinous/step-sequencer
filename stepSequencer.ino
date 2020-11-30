@@ -7,7 +7,6 @@
 #include "ioexpander.h"
 
 
-
 void measurePerformance(uint32_t now){
 	static uint32_t lastMillis = now;
 	static uint32_t lastMillis_fast = now;
@@ -26,9 +25,7 @@ void measurePerformance(uint32_t now){
 }
 
 
-
 void loop(){
-	// PRINTLN("loop");
 	uint32_t now = millis();
 	processRatePot(now);
 	processInnerSequencer(now);
@@ -36,7 +33,6 @@ void loop(){
 	processIOExpander(now);
 
 	measurePerformance(now);
-
 }
 
 

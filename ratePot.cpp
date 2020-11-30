@@ -12,7 +12,6 @@ volatile int adcVal; // never read without checking adcValAvail
 ISR(ADC_vect){
 	// Must read low first
 	adcVal = ADCL | (ADCH << 8);
-
 	adcValAvail = true;
 }
 
@@ -36,8 +35,6 @@ static void startAdcRead(){
 }
 
 
-
-
 //////////////// Rate Pot
 
 //  hystPos.value() ranges from 0 -> 1023-hystPos.hysteresis
@@ -49,7 +46,6 @@ void processRatePot(uint32_t now){
 	if(!adcValAvail){
 		return;
 	}
-
 
 	if(hystPot.update(adcVal)){
 		//// map rateVal to qtrNote duration ////
