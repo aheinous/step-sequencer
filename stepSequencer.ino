@@ -9,16 +9,18 @@
 
 void measurePerformance(uint32_t now){
 	static uint32_t lastMillis = now;
-	static uint32_t lastMillis_fast = now;
+	static uint32_t lastFrameMicros = micros();
 	static uint32_t iter = 0;
 
-	static uint16_t maxFrame = 0;
-	maxFrame = max(maxFrame, now - lastMillis_fast);
-	lastMillis_fast= now;
 
-	if(++iter %100000 == 0){
-		PRINT(iter/100000);
-		PRINTF(": %lu ms, max frame: %u ms\n", now-lastMillis, maxFrame);
+	uint32_t now_us = micros();
+	static uint16_t maxFrame = 0;
+	maxFrame = max(maxFrame, now_us - lastFrameMicros);
+	lastFrameMicros= now_us;
+
+	if(++iter %10000 == 0){
+		PRINT(iter);
+		PRINTF(": %lu ms, max frame: %u usec\n", now-lastMillis, maxFrame);
 		maxFrame = 0;
 		lastMillis = now;
 	}
