@@ -123,7 +123,10 @@ Debouncer resetButtonDebouncer;
 void processIOExpander(uint32_t now) {
 	bool intterrupt = !isBitHigh(IOEX_INT_READ, IOEX_INT);
 
-	if(intterrupt) {
+
+
+
+void processIOExpander(uint32_t now) {
 		uint8_t inputs = ioExpander.digitalRead_8(INPUT_PORT);
 
 		uint8_t oldValue = rotEnc.value();
@@ -132,23 +135,30 @@ void processIOExpander(uint32_t now) {
 			setNumSteps(now, rotEnc.value());
 		}
 
+
 		divButtonDebouncer.update(inputs & ROT_ENC_BUTTON, now);
 		if(divButtonDebouncer.justPressed()) {
 			curDivMode = (curDivMode + 1) % countof(divideModes);
 			updateLEDs();
-			if(divideModes[curDivMode].num == 0){
+		if(divideModes[curDivMode].num == 0) {
 				setSingleStepMode(true);
-			}else{
+		}
+		else {
 				setSingleStepMode(false);
 				setDivide(now, divideModes[curDivMode].num, divideModes[curDivMode].denom);
 			}
 		}
 
 		resetButtonDebouncer.update(inputs & PHASE_RESET_BUTTON, now);
+	// if(resetButtonDebouncer.justReleased()) {
+	// 	PRINTLN("reset button released");
+	// }
 		if(resetButtonDebouncer.justPressed()) {
-			if(inSingleStepMode()){
+		PRINTLN("reset button pressed");
+		if(inSingleStepMode()) {
 				singleStep();
-			}else{
+		}
+		else {
 				resetPhase(now);
 			}
 		}
