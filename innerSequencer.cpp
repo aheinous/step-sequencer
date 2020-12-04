@@ -65,6 +65,15 @@ public:
 		return _durations;
 	}
 
+
+	void printDurations(){
+		for(uint8_t i = 0; i < 16; i++){
+			PRINT(_durations[i]);
+			PRINT(" ");
+		}
+		PRINTLN("");
+	}
+
 	void setStepNum(uint8_t n) {
 		_stepNum = n;
 	}
@@ -118,15 +127,30 @@ class ParameterManager {
 public:
 
 	void init() {
-		setParameters(0, 500, 1, 1, 16);
+		setParameters(0, 500, 1, 1, 16, NULL);
 	}
 
 	void process(uint32_t now) {
+		uint8_t muxStartStep = muxSequencer.stepNum();
+		uint8_t clkStartStep = clockSequencer.stepNum();
+
+	F("sfsd");
 		muxSequencer.process(now);
 		clockSequencer.process(now);
 
 		muxSequencer.updatePins();
 		clockSequencer.updatePins();
+
+		if(muxSequencer.stepNum() == 0 && muxStartStep != 0){
+			if(clkStartStep == 0 || clockSequencer.stepNum() != 0){
+				PVAR(clkStartStep);
+				PVAR(clockSequencer.stepNum());
+				PVAR(clockSequencer.getDurationSoFar(now));
+				PVAR(clockSequencer.getDurationTotal());
+				PVAR(muxSequencer.getDurationTotal());
+				ASSERT(false);
+	}
+		}
 	}
 
 	void setQuarterNote_beatNow(uint32_t now, uint16_t qtrNote) {
@@ -148,22 +172,36 @@ public:
 
 	void setNumSteps(uint32_t now, uint8_t n) {
 		uint8_t stepNum = muxSequencer.stepNum();
-		setParameters(now, m_qtrNote, m_num, m_denom, n);
+		setParameters(now, m_qtrNote, m_num, m_denom, n, m_rhythm);
 		muxSequencer.setStepNum(stepNum < n ? stepNum : 0);
 	}
 
 	void setDivide(uint32_t now, uint8_t num, uint8_t denom) {
-		setParameters(now, m_qtrNote, num, denom, m_numSteps);
+		setParameters(now, m_qtrNote, num, denom, m_numSteps, m_rhythm);
 	}
 
-	void setParameters(uint32_t now, uint16_t qtrNote, uint8_t num, uint8_t denom, uint8_t numSteps) {
+	void setRhythm(uint32_t now, const uint16_t (*rhythm)[16]){
+		setParameters(now, m_qtrNote, m_num, m_denom, m_numSteps, rhythm);
+	}
+
+
+	void setParameters(uint32_t now,
+						uint16_t qtrNote,
+						uint8_t num,
+						uint8_t denom,
+						uint8_t numSteps,
+						const uint16_t(*rhythm)[16]) 	{
 		ASSERTF(numSteps <= 16, "numsteps: %u", numSteps);
 
 		qtrNote = roundToNearestMult<uint16_t>(qtrNote, denom);
 		uint16_t dividedDuration = num * (qtrNote / denom);
 
+		if(rhythm == NULL){
 		for(uint8_t i = 0; i < numSteps; i++) {
 			muxSequencer.durations()[i] = dividedDuration;
+		}
+		}else{
+			setMuxRhythmDurations(dividedDuration, rhythm, numSteps);
 		}
 		muxSequencer.setNumSteps(numSteps);
 
@@ -177,35 +215,59 @@ public:
 		m_num = num;
 		m_denom = denom;
 		m_numSteps = numSteps;
+		m_rhythm = rhythm;
 	}
 
-	uint8_t numSteps(){
+	uint8_t numSteps() {
 		return m_numSteps;
 	}
 
-	void resetPhase(uint32_t now){
+	void resetPhase(uint32_t now) {
 		muxSequencer.resetPhase(now);
 		// muxSequencer.updatePins();
 		clockSequencer.resetPhase(now);
 	}
 
-	void singleStep(){
+	void singleStep() {
 		muxSequencer.setStepNum((muxSequencer.stepNum() + 1) % muxSequencer.numSteps());
 		muxSequencer.updatePins();
 	}
 
-	void updateMuxPins(){
+	void updateMuxPins() {
 		muxSequencer.updatePins();
 	}
 
 private:
 
+
+	void setMuxRhythmDurations(uint16_t base, const uint16_t(*rhythm)[16], uint8_t numSteps) {
+		uint16_t totalDuration = base * numSteps;
+		uint16_t durationThusFar = 0;
+
+		for(uint8_t i = 0; i < numSteps; i++) {
+			PVAR((*rhythm)[i] );
+			muxSequencer.durations()[i] = ((uint32_t)base) * (*rhythm)[i] / 1000;
+			durationThusFar += muxSequencer.durations()[i];
+		}
+
+		int32_t fudge = totalDuration - durationThusFar;
+		PVAR(durationThusFar);
+		PVAR(totalDuration);
+		PVAR(base);
+		PVAR(fudge);
+		muxSequencer.durations()[numSteps - 1] += fudge;
+		muxSequencer.printDurations();
+		// ASSERT(fudge < (int32_t) muxSequencer.durations()[numSteps - 1]);
+
+	}
+
 	void setQuarterNote_phaseOffset(uint32_t now, uint16_t qtrNote, int16_t offset) {
+		PVAR(qtrNote);
 		//  get durationSoFar and durationTotalfor phase calculation later
 		uint16_t mux_durationSoFar = muxSequencer.getDurationSoFar(now);
 		uint16_t mux_durationTotal = muxSequencer.getDurationTotal();
 
-		setParameters(now, qtrNote, m_num, m_denom, m_numSteps);
+		setParameters(now, qtrNote, m_num, m_denom, m_numSteps, m_rhythm);
 
 		// calc new phase
 		uint32_t adj_durationSoFar = (mux_durationSoFar + offset) % mux_durationTotal;
@@ -221,6 +283,7 @@ private:
 	ClockSequencer clockSequencer;
 
 	uint16_t m_qtrNote;
+	const uint16_t(*m_rhythm)[16] = NULL;
 	uint8_t m_num;
 	uint8_t m_denom;
 	uint8_t m_numSteps;
@@ -241,7 +304,11 @@ void setDivide(uint32_t now, uint8_t num, uint8_t denom) {
 	parameterManager.setDivide(now, num, denom);
 }
 
-void resetPhase(uint32_t now){
+void setRhythm(uint32_t now, const uint16_t (*rhythm)[16]){
+	parameterManager.setRhythm(now, rhythm);
+}
+
+void resetPhase(uint32_t now) {
 	parameterManager.resetPhase(now);
 }
 
@@ -250,20 +317,20 @@ void resetPhase(uint32_t now){
 
 bool _inSingleStepMode = false;
 
-void setSingleStepMode(bool ssmode){
-	if(_inSingleStepMode == ssmode){
+void setSingleStepMode(bool ssmode) {
+	if(_inSingleStepMode == ssmode) {
 		return;
 	}
 	_inSingleStepMode = ssmode;
-	if(ssmode){
+	if(ssmode) {
 		clearBits(CLK_OUT_WRITE, CLK_OUT);
 	}
 
 }
-bool inSingleStepMode(){
+bool inSingleStepMode() {
 	return _inSingleStepMode;
 }
-void singleStep(){
+void singleStep() {
 	ASSERT(_inSingleStepMode);
 	parameterManager.singleStep();
 }
@@ -293,10 +360,10 @@ void process_showNumSteps(uint32_t now, int8_t delta) {
 	if(showNumStepsFor <= 0) {
 		showNumStepsFor = 0;
 		clearBits(MUX_WRITE, POT_nENABLE);
-		if(_inSingleStepMode){
+		if(_inSingleStepMode) {
 			parameterManager.updateMuxPins();
 		}
-		else{
+		else {
 			parameterManager.resetPhase(now);
 			// parameterManager.stepNum();
 		}
@@ -310,7 +377,7 @@ void processInnerSequencer(uint32_t now) {
 	if(showNumStepsFor) {
 		process_showNumSteps(now, now - prevNow);
 	}
-	else if(_inSingleStepMode){
+	else if(_inSingleStepMode) {
 		// ...
 	}
 	else {

@@ -10,9 +10,9 @@ const uint8_t ROT_ENC_B = (1 << 1);
 const uint8_t ROT_ENC_AB = 0x3;
 const uint8_t ROT_ENC_BUTTON = (1 << 2);
 const uint8_t PHASE_RESET_BUTTON = (1 << 3);
-const uint8_t RYTHYM_BUTTON = (1 << 4);
+const uint8_t RHYTHM_BUTTON = (1 << 4);
 
-const uint8_t INPUTS = ROT_ENC_A | ROT_ENC_B | ROT_ENC_BUTTON | PHASE_RESET_BUTTON | RYTHYM_BUTTON;
+const uint8_t INPUTS = ROT_ENC_A | ROT_ENC_B | ROT_ENC_BUTTON | PHASE_RESET_BUTTON | RHYTHM_BUTTON;
 
 const uint8_t INPUT_PORT = MCP23x17_PORTA;
 const uint8_t LED_PORT = MCP23x17_PORTB;
@@ -56,9 +56,42 @@ TapDivideMode divideModes[] = {
 };
 
 
+
+
+struct RhythmMode {
+	uint16_t rhythm[16];
+	uint8_t rgb;
+};
+
+uint8_t curRhythmMode = 0;
+
+RhythmMode rhythmModes[] = {
+	{{	1000, 1000, 1000, 1000, 	1000, 1000, 1000, 1000,
+		1000, 1000, 1000, 1000, 	1000, 1000, 1000, 1000}, RED},
+
+	{{	1300,  700, 1300, 700, 		1300,  700, 1300, 700,
+		1300,  700, 1300, 700, 		1300,  700, 1300, 700}, YELLOW},
+
+	{{	1000, 1000, 1000, 1000, 	1000, 1000, 1000, 1000,
+		1000, 1000, 1000, 1000, 	1000, 1000, 1000, 1000}, GREEN},
+
+	{{	1000, 1000, 1000, 1000, 	1000, 1000, 1000, 1000,
+		1000, 1000, 1000, 1000, 	1000, 1000, 1000, 1000}, CYAN},
+
+	{{	1000, 1000, 1000, 1000, 	1000, 1000, 1000, 1000,
+		1000, 1000, 1000, 1000, 	1000, 1000, 1000, 1000}, BLUE},
+
+	{{	1000, 1000, 1000, 1000, 	1000, 1000, 1000, 1000,
+		1000, 1000, 1000, 1000, 	1000, 1000, 1000, 1000}, VIOLET},
+
+	{{	1000, 1000, 1000, 1000, 	1000, 1000, 1000, 1000,
+		1000, 1000, 1000, 1000, 	1000, 1000, 1000, 1000}, WHITE}
+};
+
+
 void updateLEDs() {
 	uint8_t rgb1 = divideModes[curDivMode].rgb;
-	uint8_t rgb2 = R | B;
+	uint8_t rgb2 = rhythmModes[curRhythmMode].rgb;
 
 	ioExpander.digitalWrite_8(LED_PORT, ~rgb1 & ~(rgb2 << 3), RGB1 | RGB2);
 }
@@ -119,49 +152,52 @@ Debouncer divButtonDebouncer;
 
 Debouncer resetButtonDebouncer;
 
-
-void processIOExpander(uint32_t now) {
-	bool intterrupt = !isBitHigh(IOEX_INT_READ, IOEX_INT);
-
-
+Debouncer rhythmButtonDebouncer;
 
 
 void processIOExpander(uint32_t now) {
-		uint8_t inputs = ioExpander.digitalRead_8(INPUT_PORT);
+	uint8_t inputs = ioExpander.digitalRead_8(INPUT_PORT);
 
-		uint8_t oldValue = rotEnc.value();
-		bool wasMovement = rotEnc.update(inputs & ROT_ENC_AB);
-		if(wasMovement && (oldValue != rotEnc.value() || rotEnc.value() == 1 || rotEnc.value() == 16)) {
-			setNumSteps(now, rotEnc.value());
-		}
+	uint8_t oldValue = rotEnc.value();
+	bool wasMovement = rotEnc.update(inputs & ROT_ENC_AB);
+	if(wasMovement && (oldValue != rotEnc.value() || rotEnc.value() == 1 || rotEnc.value() == 16)) {
+		setNumSteps(now, rotEnc.value());
+	}
 
 
-		divButtonDebouncer.update(inputs & ROT_ENC_BUTTON, now);
-		if(divButtonDebouncer.justPressed()) {
-			curDivMode = (curDivMode + 1) % countof(divideModes);
-			updateLEDs();
+	divButtonDebouncer.update(inputs & ROT_ENC_BUTTON, now);
+	if(divButtonDebouncer.justPressed()) {
+		curDivMode = (curDivMode + 1) % countof(divideModes);
+		updateLEDs();
 		if(divideModes[curDivMode].num == 0) {
-				setSingleStepMode(true);
+			setSingleStepMode(true);
 		}
 		else {
-				setSingleStepMode(false);
-				setDivide(now, divideModes[curDivMode].num, divideModes[curDivMode].denom);
-			}
+			setSingleStepMode(false);
+			setDivide(now, divideModes[curDivMode].num, divideModes[curDivMode].denom);
 		}
+	}
 
-		resetButtonDebouncer.update(inputs & PHASE_RESET_BUTTON, now);
+	resetButtonDebouncer.update(inputs & PHASE_RESET_BUTTON, now);
 	// if(resetButtonDebouncer.justReleased()) {
 	// 	PRINTLN("reset button released");
 	// }
-		if(resetButtonDebouncer.justPressed()) {
+	if(resetButtonDebouncer.justPressed()) {
 		PRINTLN("reset button pressed");
 		if(inSingleStepMode()) {
-				singleStep();
+			singleStep();
 		}
 		else {
-				resetPhase(now);
-			}
+			resetPhase(now);
 		}
+	}
+
+	rhythmButtonDebouncer.update(inputs & RHYTHM_BUTTON, now);
+	if(rhythmButtonDebouncer.justPressed()) {
+		PRINTLN("rhythm button pressed");
+		curRhythmMode = (curRhythmMode + 1) % countof(rhythmModes);
+		updateLEDs();
+		setRhythm(now, &(rhythmModes[curRhythmMode].rhythm));
 	}
 }
 
