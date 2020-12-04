@@ -134,23 +134,29 @@ public:
 		uint8_t muxStartStep = muxSequencer.stepNum();
 		uint8_t clkStartStep = clockSequencer.stepNum();
 
-	F("sfsd");
 		muxSequencer.process(now);
 		clockSequencer.process(now);
 
 		muxSequencer.updatePins();
 		clockSequencer.updatePins();
 
-		if(muxSequencer.stepNum() == 0 && muxStartStep != 0){
-			if(clkStartStep == 0 || clockSequencer.stepNum() != 0){
-				PVAR(clkStartStep);
-				PVAR(clockSequencer.stepNum());
-				PVAR(clockSequencer.getDurationSoFar(now));
-				PVAR(clockSequencer.getDurationTotal());
-				PVAR(muxSequencer.getDurationTotal());
-				ASSERT(false);
-	}
-		}
+
+		// check syncronization
+		// if(muxSequencer.stepNum() == 0 && muxStartStep != 0){
+		// 	if(clkStartStep == 0 || clockSequencer.stepNum() != 0){
+		// 		PRINTLN("OUT OF STEP");
+		// 		PVAR(clkStartStep);
+		// 		PVAR(clockSequencer.stepNum());
+		// 		PVAR(clockSequencer.getDurationSoFar(now));
+		// 		PVAR(clockSequencer.getDurationTotal());
+		// 		PVAR(muxSequencer.getDurationTotal());
+		// 		PRINTLN("");
+		// 		// ASSERT(false);
+		// 	}
+		// 	else{
+		// 		PRINTLN("IN STEP");
+		// 	}
+		// }
 	}
 
 	void setQuarterNote_beatNow(uint32_t now, uint16_t qtrNote) {
