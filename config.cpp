@@ -25,4 +25,4 @@ uint8_t RATE_ADC_CHANNEL = 3;
 
 
 const uint16_t MIN_QUARTER_NOTE = 200;
-const uint16_t MAX_QUARTER_NOTE = 2000;
+const uint16_t MAX_QUARTER_NOTE = 2000; // max possible 4095 msec
