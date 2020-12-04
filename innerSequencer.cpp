@@ -131,8 +131,8 @@ public:
 	}
 
 	void process(uint32_t now) {
-		uint8_t muxStartStep = muxSequencer.stepNum();
-		uint8_t clkStartStep = clockSequencer.stepNum();
+		// uint8_t muxStartStep = muxSequencer.stepNum();
+		// uint8_t clkStartStep = clockSequencer.stepNum();
 
 		muxSequencer.process(now);
 		clockSequencer.process(now);
