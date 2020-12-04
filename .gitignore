@@ -1,1 +1,7 @@
 .vscode
+build/alex.avr.sseq/stepSequencer.ino.eep
+build/alex.avr.sseq/stepSequencer.ino.elf
+build/alex.avr.sseq/stepSequencer.ino.hex
+build/alex.avr.sseq/stepSequencer.ino.with_bootloader.bin
+build/alex.avr.sseq/stepSequencer.ino.with_bootloader.hex
+sketch.json
