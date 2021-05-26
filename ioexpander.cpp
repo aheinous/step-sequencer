@@ -96,21 +96,26 @@ void updateLEDs() {
 	ioExpander.digitalWrite_8(LED_PORT, ~rgb1 & ~(rgb2 << 3), RGB1 | RGB2);
 }
 
+
+
+static inline int32_t floorDiv(int32_t x, uint8_t y){
+	return (x > 0) ? (x/y) : (x-y+1)/y;
+}
+
+
 class RotaryEncoder {
 public:
 
 	void init(uint8_t stepsPerDetent, uint8_t startAB, int8_t startVal, int8_t minVal, int8_t maxVal) {
-		prevAB = startAB;
-		this->stepsPerDetent = stepsPerDetent;
-		this->minVal = minVal;
-		this->maxVal = maxVal;
+		_prevAB = startAB;
+		_stepsPerDetent = stepsPerDetent;
+		_minVal = minVal;
+		_maxVal = maxVal;
 		_value = startVal;
 	}
 
 	bool update(uint8_t ab) {
-		uint8_t idx = (prevAB << 2) | ab;
-
-		const int8_t LUT[] = {
+		const int8_t RAW_VALUES_TO_DIFF[] = {
 			//			00,	01, 10, 11
 			/* 00 */	 0,	+1,	-1,	 0,
 			/* 01 */	-1,	 0,	 0,	+1,
@@ -119,17 +124,16 @@ public:
 
 		};
 
-		int8_t diff = LUT[idx];
-		bool wasChange = (prevAB != ab); // detect any encoder "movement" not change in output value
-		prevAB = ab;
+		int8_t diff = RAW_VALUES_TO_DIFF[(_prevAB << 2) | ab];
+		int32_t prevRndVal = floorDiv(_rawValue, 4);
+		_rawValue += diff;
+		int32_t rndVal = floorDiv(_rawValue, 4);
 
-		// divide by 4, but account for -3 to 3 all mapping to 0.
-		int32_t prevRndVal = rawValue >= 0 ? rawValue / 4 : (rawValue - 3) / 4;
-		rawValue += diff;
-		int32_t rndVal = rawValue >= 0 ? rawValue / 4 : (rawValue - 3) / 4;
+		_value = clamp<int16_t>(_value + rndVal - prevRndVal, _minVal, _maxVal);
 
-		_value = clamp<int16_t>(_value + rndVal - prevRndVal, minVal, maxVal);
-
+		bool wasChange = (_prevAB != ab); 	// detect any encoder "movement", as oppposed to
+											// change in output value, which is clamped.
+		_prevAB = ab;
 		return wasChange;
 	}
 
@@ -138,12 +142,12 @@ public:
 	}
 
 private:
-	int32_t rawValue = 1;
-	int8_t _value = 0;
-	uint8_t stepsPerDetent;
-	uint8_t prevAB;
-	int8_t minVal;
-	int8_t maxVal;
+	int32_t _rawValue = 1;
+	int8_t _value;
+	uint8_t _stepsPerDetent;
+	uint8_t _prevAB;
+	int8_t _minVal;
+	int8_t _maxVal;
 };
 
 RotaryEncoder rotEnc;
