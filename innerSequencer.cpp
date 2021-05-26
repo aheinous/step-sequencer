@@ -202,14 +202,14 @@ public:
 		qtrNote = roundToNearestMult<uint16_t>(qtrNote, denom);
 		uint16_t dividedDuration = num * (qtrNote / denom);
 
+		muxSequencer.setNumSteps(numSteps);
 		if(rhythm == NULL){
 		for(uint8_t i = 0; i < numSteps; i++) {
 			muxSequencer.durations()[i] = dividedDuration;
 		}
 		}else{
-			setMuxRhythmDurations(dividedDuration, rhythm, numSteps);
+			setMuxRhythmDurations(dividedDuration, rhythm);
 		}
-		muxSequencer.setNumSteps(numSteps);
 
 		clockSequencer.durations()[0] = min(200, qtrNote / 2);
 		clockSequencer.durations()[1] = qtrNote - clockSequencer.durations()[0];
