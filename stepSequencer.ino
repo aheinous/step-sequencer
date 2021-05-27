@@ -1,7 +1,7 @@
 #include "config.h"
 #include "ratePot.h"
 #include "tapHandler.h"
-#include "innerSequencer.h"
+#include "sequencePlayers.h"
 #include <Arduino.h>
 #include <BPUtil.h>
 #include "ioexpander.h"
@@ -30,7 +30,7 @@ void measurePerformance(uint32_t now){
 void loop(){
 	uint32_t now = millis();
 	processRatePot(now);
-	processInnerSequencer(now);
+	processSequencePlayers(now);
 	processTap(now);
 	processIOExpander(now);
 
@@ -47,7 +47,7 @@ void setup(){
 	#endif
 	PRINTLN("--------------- Step Sequencer Start --------------");
 
-	initInnerSequencer();
+	initSequencePlayers();
 	initTapHandler();
 	initRatePot();
 	initIOExpander();

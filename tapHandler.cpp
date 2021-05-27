@@ -2,7 +2,7 @@
 #include <BPUtil.h>
 #include "config.h"
 #include "Debouncer.h"
-#include "innerSequencer.h"
+#include "sequencePlayers.h"
 
 
 Debouncer tapDebouncer;

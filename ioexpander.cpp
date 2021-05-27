@@ -2,7 +2,7 @@
 #include <MCP23017.h>
 #include <BPUtil.h>
 #include "config.h"
-#include "innerSequencer.h"
+#include "sequencePlayers.h"
 #include <Debouncer.h>
 
 const uint8_t ROT_ENC_A = (1 << 0);

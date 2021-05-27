@@ -1,6 +1,6 @@
 #include "ratePot.h"
 #include "config.h"
-#include "innerSequencer.h"
+#include "sequencePlayers.h"
 #include <BPUtil.h>
 
 ///////////////////////////////////////// ADC ///////

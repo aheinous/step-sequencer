@@ -2,8 +2,8 @@
 #include <stdint.h>
 #include "config.h"
 
-void initInnerSequencer();
-void processInnerSequencer(uint32_t now);
+void initSequencePlayers();
+void processSequencePlayers(uint32_t now);
 
 void setQuarterNote_beatNow(uint32_t now, uint16_t qtrNote);
 void setQuarterNote_keepPhase(uint32_t now, uint16_t qtrNote);
