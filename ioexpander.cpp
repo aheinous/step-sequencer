@@ -59,7 +59,7 @@ TapDivideMode divideModes[] = {
 
 
 struct RhythmMode {
-	uint16_t rhythm[16];
+	uint16_t rhythm[MAX_STEPS];
 	uint8_t rgb;
 };
 
@@ -165,7 +165,7 @@ void processIOExpander(uint32_t now) {
 
 	uint8_t oldValue = rotEnc.value();
 	bool wasMovement = rotEnc.update(inputs & ROT_ENC_AB);
-	if(wasMovement && (oldValue != rotEnc.value() || rotEnc.value() == 1 || rotEnc.value() == 16)) {
+	if(wasMovement && (oldValue != rotEnc.value() || rotEnc.value() == 1 || rotEnc.value() == MAX_STEPS)) {
 		setNumSteps(now, rotEnc.value());
 	}
 
@@ -215,6 +215,6 @@ void initIOExpander() {
 	ioExpander.pinMode_8(LED_PORT, ~(RGB1 | RGB2));
 
 	uint8_t inputs = ioExpander.digitalRead_8(INPUT_PORT);
-	rotEnc.init(4, inputs & ROT_ENC_AB, 16, 1, 16);
+	rotEnc.init(4, inputs & ROT_ENC_AB, MAX_STEPS, 1, MAX_STEPS);
 	updateLEDs();
 }

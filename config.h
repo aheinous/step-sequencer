@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#define MAX_STEPS 16
 
 extern const uint8_t CLK_OUT;
 extern volatile uint8_t & CLK_OUT_WRITE;
@@ -26,5 +27,3 @@ extern uint8_t RATE_ADC_CHANNEL;
 
 extern const uint16_t MIN_QUARTER_NOTE;
 extern const uint16_t MAX_QUARTER_NOTE;
-
-
