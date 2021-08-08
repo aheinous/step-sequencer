@@ -43,16 +43,17 @@ struct TapDivideMode {
 	uint8_t rgb;
 };
 
-uint8_t curDivMode = 0;
+uint8_t curDivMode = 1;
 
 TapDivideMode divideModes[] = {
+	{2, 1, WHITE},	// half-note
 	{1, 1, RED},	// quarter note
 	{3, 4, YELLOW},	// dotted eigth
 	{2, 3, GREEN },	// quarter note triplet
 	{1, 2, CYAN},	// eigth
 	{1, 3, BLUE},	// eigth note triplet
 	{1, 4, VIOLET},	// sixteenth
-	{0, 0, WHITE}	// single step mode
+	{0, 0, BLACK}	// single step mode
 };
 
 
@@ -184,9 +185,6 @@ void processIOExpander(uint32_t now) {
 	}
 
 	resetButtonDebouncer.update(inputs & PHASE_RESET_BUTTON, now);
-	// if(resetButtonDebouncer.justReleased()) {
-	// 	PRINTLN("reset button released");
-	// }
 	if(resetButtonDebouncer.justPressed()) {
 		PRINTLN("reset button pressed");
 		if(inSingleStepMode()) {
